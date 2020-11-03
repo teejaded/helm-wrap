@@ -2,7 +2,7 @@ project_name: "helm-sops"
 
 before:
   hooks:
-    - "go mod download"
+    - "go mod vendor"
 
 builds:
   - binary: "helm-sops"
@@ -11,6 +11,10 @@ builds:
     mod_timestamp: "{{ $.CommitTimestamp }}"
     env:
       - "CGO_ENABLED=0"
+    goos:
+      - linux
+      - darwin
+      - windows
 
 release:
   prerelease: "false"
