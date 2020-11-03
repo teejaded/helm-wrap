@@ -11,6 +11,10 @@ builds:
     mod_timestamp: "{{ $.CommitTimestamp }}"
     env:
       - "CGO_ENABLED=0"
+    goos:
+      - linux
+      - darwin
+      - windows
 
 release:
   prerelease: "false"
