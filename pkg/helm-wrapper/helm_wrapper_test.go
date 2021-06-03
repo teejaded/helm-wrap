@@ -134,7 +134,7 @@ func TestRunHelm(t *testing.T) {
 	}()
 
 	os.Args = []string{
-		"./helm-sops",
+		"./helm-wrap",
 		"template",
 		"../../test/charts/test",
 		"--values=../../test/charts/test/values-enc.yaml",

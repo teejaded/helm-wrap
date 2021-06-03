@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/teejaded/helm-sops/pkg/helm-wrapper"
+	"github.com/teejaded/helm-wrap/pkg/helm-wrapper"
 )
 
 func main() {

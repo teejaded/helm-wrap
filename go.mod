@@ -1,4 +1,4 @@
-module github.com/teejaded/helm-sops
+module github.com/teejaded/helm-wrap
 
 go 1.16
 

@@ -14,8 +14,8 @@ import (
 
 	//"go.mozilla.org/sops/v3/decrypt"
 
-	"github.com/teejaded/helm-sops/pkg/utils"
-	"github.com/teejaded/helm-sops/pkg/config"
+	"github.com/teejaded/helm-wrap/pkg/utils"
+	"github.com/teejaded/helm-wrap/pkg/config"
 )
 
 type HelmWrapper struct {

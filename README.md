@@ -58,7 +58,7 @@ repoServer:
       imagePullPolicy: Always
       env:
         - name: HELM_SOPS_URL
-          value: "https://github.com/teejaded/helm-sops/releases/download/20201103-2/helm-sops_20201103-2_linux_amd64.tar.gz"
+          value: "https://github.com/teejaded/helm-wrap/releases/download/20201103-2/helm-wrap_20201103-2_linux_amd64.tar.gz"
         - name: HELM_3_URL
           value: "https://get.helm.sh/helm-v3.4.2-linux-amd64.tar.gz"
         - name: HELM_2_URL

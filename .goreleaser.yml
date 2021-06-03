@@ -1,11 +1,11 @@
-project_name: "helm-sops"
+project_name: "helm-wrap"
 
 before:
   hooks:
     - "go mod vendor"
 
 builds:
-  - binary: "helm-sops"
+  - binary: "helm-wrap"
     flags: "-trimpath"
     ldflags: "-s -w"
     mod_timestamp: "{{ $.CommitTimestamp }}"
