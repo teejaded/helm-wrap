@@ -1,65 +1,134 @@
-# Helm Sops
+# Helm Wrap
 
-Helm Sops is a Helm wrapper which decrypts Sops encrypted value files before invoking Helm. It does so by using named pipes to pass cleartext value files to Helm in order to avoid secrets being written to disk in clear.
+Helm Wrap is a Helm wrapper which processes yaml values files and helm output. It passes values files through named pipes incase you are decrypting them.
+
+This tool is intended to be used with [ArgoCD's Helm feature](https://argoproj.github.io/argo-cd/user-guide/helm/).  It enables you to pre-process values or post-process helm output without using a custom plugin.
 
 ## Installation
 
 ### Prerequisites
 
-Helm is needed for Helm Sops to work. Follow the instructions [here](https://helm.sh/docs/intro/install/) to install it.
+Helm is needed for Helm Wrap to work. Follow the instructions [here](https://helm.sh/docs/intro/install/) to install it.
 
-### Getting Helm Sops binary
+### Getting Helm Wrap binary
 
-#### Helm Sops releases
+#### Helm Wrap releases
 
-Helm Sops released binaries can be downloaded from [GitHub](https://github.com/camptocamp/helm-sops/releases).
+Helm Wrap released binaries can be downloaded from [GitHub](https://github.com/teejaded/helm-wrap/releases).
 
 #### Building from sources
 
-Helm Sops can be built using the `go build` command.
+Helm Wrap can be built using the `go build` command.
 
-### Deploying Helm Sops
+### Deploying Helm Wrap
 
-Deploy Helm Sops executable (`helm-sops`) in a directory present in the *PATH*. When invoking Helm Sops, it will look for a Helm executable named `helm` in the *PATH*.
+* Rename helm to _helm.
+* Rename helm2 to _helm2 
+* Add the `helm-wrap` binary with the names `helm` and `helm2`. 
 
-Alternatively, Helm Sops executable can be renamed `helm` before deploying it. When invoked as `helm`, Helm Sops will look for a Helm executable named `_helm` in the *PATH*.
+You can do this using an init container or by building custom images.  Here is an example using the [argo-cd helm chart](https://github.com/argoproj/argo-helm/tree/master/charts/argo-cd).
+
+```
+repoServer:
+  volumes:
+  - name: custom-tools
+    emptyDir: {}
+
+  volumeMounts:
+    - mountPath: /usr/local/bin/_helm2
+      name: custom-tools
+      subPath: helm-v2
+    - mountPath: /usr/local/bin/_helm
+      name: custom-tools
+      subPath: helm-v3
+
+    # mount helm-wrap as helm and helm2
+    - mountPath: /usr/local/bin/helm
+      name: custom-tools
+      subPath: helm-wrap
+    - mountPath: /usr/local/bin/helm2
+      name: custom-tools
+      subPath: helm-wrap
+
+  initContainers:
+    - name: download-tools
+      image: alpine:latest
+      imagePullPolicy: Always
+      env:
+        - name: HELM_SOPS_URL
+          value: "https://github.com/teejaded/helm-sops/releases/download/20201103-2/helm-sops_20201103-2_linux_amd64.tar.gz"
+        - name: HELM_3_URL
+          value: "https://get.helm.sh/helm-v3.4.2-linux-amd64.tar.gz"
+        - name: HELM_2_URL
+          value: "https://storage.googleapis.com/kubernetes-helm/helm-v2.17.0-linux-amd64.tar.gz"
+      command: [sh, -c]
+      args:
+        - >-
+          set -x;
+          cd /custom-tools &&
+          wget -qO- $HELM_SOPS_URL | tar -xvzf - &&
+          wget -qO- $HELM_3_URL | tar -xvzf - &&
+          mv linux-amd64/helm /custom-tools/helm-v3 &&
+          wget -qO- $HELM_2_URL | tar -xvzf - &&
+          mv linux-amd64/helm /custom-tools/helm-v2
+      volumeMounts:
+        - mountPath: /custom-tools
+          name: custom-tools
+```
 
 ## Usage
 
-Create encrypted value files using [Sops](https://github.com/mozilla/sops) and name them using the `^secrets((-|\.|_).+)?\.yaml$` pattern (for example `secrets.yaml`, `secrets-production.yaml` or `secrets.lab.yaml`).
+Create a config json that processes your yaml.  The config consists of an array of actions that are executed in order.
 
-To pass these encrypted value files to Helm, just invoke Helm Sops with the same arguments which would be used for the Helm invocation (for example  
-`helm-sops template . --values secrets.yaml --values secrets-production.yaml` or  
-`helm template . --values secrets.yaml --values secrets-production.yaml`  
-depending on how Helm Sops was deployed).
+### transform-values action
 
-## Example application
+This action calls your command for each helm values file found in the arguments. Stdout is captured and written to a named pipe.
 
-An example application as well as an example Argo CD setup to deploy it can be found [here](https://github.com/camptocamp/argocd-helm-sops-example).
+The values file path is subsituted for `{}`.
 
-## Git diff helper
+There is an optional "filter" parameter which will check if a json path exists before running your command.
 
-The following script (`sops-git-diff-helper`) can be placed in the *PATH* to be used as a Git diff helper for Sops encrypted value files:
 
-```sh
-#! /bin/sh
+### shell-exec
 
-if [ $# -ne 1 ]
-then
-	exit 1
-fi
+This action runs the command using `/bin/sh -c`.  It adds an environment variable `HELM` that contains the correct binary and arguments.
 
-if [ -n "${SOPS_ENCRYPTED_DIFF}" ]
-then
-	cat "$1"
-else
-	sops -d "$1" 2>&1 || cat "$1"
-fi
+## Example Configs
+
+This configuration replicates the functionality of Camptocamp's helm-sops
+
+```json
+[
+	{
+		"action": "transform-values",
+		"filter": "$.sops.lastmodified",
+		"command": "sops -d {}"
+	},
+	{
+		"action": "shell-exec",
+		"command": "$HELM"
+	}
+]
 ```
 
-To enable it, run `git config --global diff.sops.textconv sops-git-diff-helper` and add the following lines to the `.gitattributes` file in your Git repository:
+kustomized-helm without a plugin
 
+```json
+[
+	{
+		"action": "shell-exec",
+		"command": "$HELM > all.yaml; kustomize build $ARGOCD_APP_SOURCE_TARGET_REVISION"
+	}
+]
 ```
-secrets.yaml diff=sops
-secrets-*.yaml diff=sops
+
+argocd-vault-plugin
+
+```json
+[
+	{
+		"action": "shell-exec",
+		"command": "$HELM > all.yaml; argocd-vault-plugin generate all.yaml"
+	}
+]
 ```

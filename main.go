@@ -22,19 +22,21 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/teejaded/helm-sops/pkg/helm-wrapper"
 )
 
 func main() {
-	w, err := NewHelmWrapper()
+	w, err := helmwrapper.NewHelmWrapper()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[helm-sops] Error: %s\n", err)
+		fmt.Fprintf(os.Stderr, "[helm-wrap] Error: %s\n", err)
 		os.Exit(1)
 	}
 
 	w.RunHelm()
 
 	for _, err := range w.Errors {
-		fmt.Fprintf(os.Stderr, "[helm-sops] Error: %s\n", err)
+		fmt.Fprintf(os.Stderr, "[helm-wrap] Error: %s\n", err)
 	}
 
 	os.Exit(w.ExitCode)
