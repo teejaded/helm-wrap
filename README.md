@@ -1,8 +1,10 @@
 # Helm Wrap
 
-Helm Wrap is a Helm wrapper which processes yaml values files and helm output. It passes values files through named pipes incase you are decrypting them.
+Helm Wrap is a tool which processes helm values files and helm output.
 
 This tool is intended to be used with [ArgoCD's Helm feature](https://argoproj.github.io/argo-cd/user-guide/helm/).  It enables you to pre-process values or post-process helm output without using a custom plugin.
+
+For security, values files that have been processed are passed through named pipes to avoid writing them to disk.
 
 ## Installation
 
@@ -28,7 +30,7 @@ Helm Wrap can be built using the `go build` command.
 
 You can do this using an init container or by building custom images.  Here is an example using the [argo-cd helm chart](https://github.com/argoproj/argo-helm/tree/master/charts/argo-cd).
 
-```
+```yaml
 repoServer:
   volumes:
   - name: custom-tools
@@ -78,7 +80,17 @@ repoServer:
 
 ## Usage
 
-Create a config json that processes your yaml.  The config consists of an array of actions that are executed in order.
+Create a config json that processes your yaml and store it in the `HELMWRAP_CONFIG` environment variable.  The config consists of an array of actions that are executed in order.
+
+
+Below is an example of how to set the variable in the argo-cd helm chart.
+
+```yaml
+repoServer
+  env:
+    - name: HELMWRAP_CONFIG
+      value: '[{"action":"shell-exec","command":"$HELM"}]'
+```
 
 ### transform-values action
 
