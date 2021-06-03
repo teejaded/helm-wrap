@@ -21,12 +21,15 @@ jobs:
       - name: Install PGP and SOPS Dev Key
         run: |
           sudo apt-get install pgpgpg &&
-          gpg --import vendor/go.mozilla.org/sops/v3/pgp/sops_functional_tests_key.asc
+          gpg --import <(curl -s https://raw.githubusercontent.com/mozilla/sops/master/pgp/sops_functional_tests_key.asc)
       - uses: azure/setup-helm@v1
         with:
           version: 'latest'
         id: install
+      - name: Sops Binary Installer
+        uses: mdgreenwald/mozilla-sops-action@v1
+        id: install-sops
       - name: Build
         run: go build .
       - name: Test
-        run: go test -v .
+        run: go test -v ./...
