@@ -1,4 +1,4 @@
-package main
+package helmwrapper
 
 import (
 	"crypto/sha256"
@@ -10,11 +10,17 @@ import (
 	"regexp"
 	"sync"
 	"syscall"
+	"strings"
 
-	"go.mozilla.org/sops/v3/decrypt"
+	//"go.mozilla.org/sops/v3/decrypt"
+
+	"github.com/teejaded/helm-wrap/pkg/utils"
+	"github.com/teejaded/helm-wrap/pkg/config"
 )
 
 type HelmWrapper struct {
+	config.Config
+
 	Errors []error
 	errMutex sync.Mutex
 
@@ -27,7 +33,11 @@ type HelmWrapper struct {
 }
 
 func NewHelmWrapper() (*HelmWrapper, error) {
-	c := HelmWrapper{}
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %s", err)
+	}
+	c := HelmWrapper{Config: cfg}
 
 	c.Errors = []error{}
 	c.pipeWriterWaitGroup = sync.WaitGroup{}
@@ -40,7 +50,6 @@ func NewHelmWrapper() (*HelmWrapper, error) {
 		helmBinName = fmt.Sprintf("_%s", ourBinName)
 	}
 
-	var err error
 	c.helmBinPath, err = exec.LookPath(helmBinName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Helm binary '%s': %s", helmBinName, err)
@@ -126,15 +135,15 @@ func (c *HelmWrapper) mkTmpDir() (func(), error) {
 	}, nil
 }
 
-func (c *HelmWrapper) mkPipe(cleartextSecretFilename string) (func(), error) {
-	err := syscall.Mkfifo(cleartextSecretFilename, 0600)
+func (c *HelmWrapper) mkPipe(filename string) (func(), error) {
+	err := syscall.Mkfifo(filename, 0600)
 	if err != nil {
-		return nil, c.errorf("failed to create cleartext secret pipe '%s': %s", cleartextSecretFilename, err)
+		return nil, c.errorf("failed to create cleartext secret pipe '%s': %s", filename, err)
 	}
 	return func() {
-		err := os.Remove(cleartextSecretFilename)
+		err := os.Remove(filename)
 		if err != nil {
-			c.errorf("failed to remove cleartext secret pipe '%s': %s", cleartextSecretFilename, err)
+			c.errorf("failed to remove cleartext secret pipe '%s': %s", filename, err)
 		}
 	}, nil
 }
@@ -151,53 +160,67 @@ func (c *HelmWrapper) RunHelm() {
 	// Loop through arguments looking for --values or -f.
 	// If we find a values argument, check if file has a sops section indicating it is encrypted.
 	// Setup a named pipe and write the decrypted data into that for helm.
-	for i := range os.Args {
-		args := os.Args[i:]
 
-		filename, cleartextSecretFilename, err := c.valuesArg(args)
-		if err != nil {
-			return
-		}
-		if filename == "" {
-			continue
-		}
+	for _, step := range c.Steps {
 
-		encrypted, err := DetectSopsYaml(filename)
-		if err != nil {
-			c.errorf("error checking if file is encrypted: %s", err)
-			return
-		}
-		if !encrypted {
-			continue
-		}
+		if step.Action == "shell-exec" {
+			cmd := exec.Command("/bin/sh", "-c", step.Command)
 
-		c.replaceValueFileArg(args, cleartextSecretFilename)
+			//helmargs := "\"" + strings.Join(os.Args[1:], "\" \"") + "\""
+			helmargs := strings.Join(os.Args[1:], " ")
+			helmenv := fmt.Sprintf("HELM=%s %s", c.helmBinPath, helmargs)
+			cmd.Env = append(os.Environ(), helmenv)
 
-		cleartextSecrets, err := decrypt.File(filename, "yaml")
-		if err != nil {
-			c.errorf("failed to decrypt secret file '%s': %s", filename, err)
-			return
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				c.ExitCode = cmd.ProcessState.ExitCode()
+				c.errorf("failed to run Helm: %s", err)
+			}
 		}
 
-		cleanFn, err := c.mkPipe(cleartextSecretFilename)
-		if err != nil {
-			return
-		}
-		defer cleanFn()
+		if step.Action == "transform-values" {
+			for i := range os.Args {
+				args := os.Args[i:]
 
-		go c.pipeWriter(cleartextSecretFilename, cleartextSecrets)
+				filename, transformedFilename, err := c.valuesArg(args)
+				if err != nil {
+					return
+				}
+				if filename == "" {
+					continue
+				}
+
+				if step.Filter != "" {
+					match, err := utils.DetectJsonPath(filename, step.Filter)
+					if err != nil {
+						c.errorf("error testing jsonpath {%s}: %s", step.Filter, err)
+						return
+					}
+					if !match {
+						continue
+					}
+				}
+
+				c.replaceValueFileArg(args, transformedFilename)
+				transformedValues, err := utils.Exec(step.Command, filename)
+				if err != nil {
+					c.errorf("failed to transform file '%s': %s", filename, err)
+					return
+				}
+
+				cleanFn, err := c.mkPipe(transformedFilename)
+				if err != nil {
+					return
+				}
+				defer cleanFn()
+
+				go c.pipeWriter(transformedFilename, transformedValues)
+			}
+		}
 	}
+
 	defer c.pipeWriterWaitGroup.Wait()
-
-	cmd := exec.Command(c.helmBinPath, os.Args[1:]...)
-	cmd.Env = os.Environ()
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Run()
-	if err != nil {
-		c.ExitCode = cmd.ProcessState.ExitCode()
-		c.errorf("failed to run Helm: %s", err)
-	}
 }

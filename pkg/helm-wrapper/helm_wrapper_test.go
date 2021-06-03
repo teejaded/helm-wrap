@@ -1,4 +1,4 @@
-package main
+package helmwrapper
 
 import (
 	"os"
@@ -7,11 +7,17 @@ import (
 	"bytes"
 	"sync"
     "testing"
+
+    "github.com/kylelemons/godebug/diff"
 )
 
 var g_hw *HelmWrapper
 
 func init() {
+	os.Setenv("HELMWRAP_CONFIG", `[
+		{"action":"transform-values","filter":"$.sops.lastmodified","command":"sops -d {}"},
+		{"action":"shell-exec","command":"$HELM"}
+	]`)
     g_hw, _ = NewHelmWrapper()
 }
 
@@ -128,10 +134,11 @@ func TestRunHelm(t *testing.T) {
 	}()
 
 	os.Args = []string{
-		"./helm-sops",
+		"./helm-wrap",
 		"template",
-		"./test/charts/test",
-		"--values=test/charts/test/values-enc.yaml",
+		"../../test/charts/test",
+		"--values=../../test/charts/test/values-enc.yaml",
+		"--values=../../test/charts/test/extra.yaml",
 	}
 	g_hw.RunHelm()
 	writer.Close()
@@ -155,8 +162,9 @@ func TestRunHelm(t *testing.T) {
 	args := []string{
 		g_hw.helmBinPath,
 		"template",
-		"./test/charts/test",
-		"--values=test/charts/test/values-dec.yaml",
+		"../../test/charts/test",
+		"--values=../../test/charts/test/values-dec.yaml",
+		"--values=../../test/charts/test/extra.yaml",
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = os.Environ()
@@ -169,6 +177,7 @@ func TestRunHelm(t *testing.T) {
 	wg.Wait()
 
 	if !bytes.Equal(out1.Bytes(), out2.Bytes()) {
-		t.Errorf("unexpected RunHelm output: \n%s", out1.String())
+		diff := diff.Diff(out1.String(), out2.String())
+		t.Errorf("unexpected RunHelm output: \n%s", diff)
 	}
 }
