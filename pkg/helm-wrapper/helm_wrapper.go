@@ -164,6 +164,10 @@ func (c *HelmWrapper) RunHelm() {
 	for _, step := range c.Steps {
 
 		if step.Action == "shell-exec" {
+			if step.Filter != "" && step.Filter != os.Args[1] {
+				continue
+			}
+
 			cmd := exec.Command("/bin/sh", "-c", step.Command)
 
 			//helmargs := "\"" + strings.Join(os.Args[1:], "\" \"") + "\""
