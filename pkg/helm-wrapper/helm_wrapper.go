@@ -157,6 +157,9 @@ func (c *HelmWrapper) RunHelm() {
 	}
 	defer cleanFn()
 
+	// Make sure we wait for the pipes to close before we return
+	defer c.pipeWriterWaitGroup.Wait()
+
 	// Loop through arguments looking for --values or -f.
 	// If we find a values argument, check if file has a sops section indicating it is encrypted.
 	// Setup a named pipe and write the decrypted data into that for helm.
@@ -183,6 +186,7 @@ func (c *HelmWrapper) RunHelm() {
 				c.ExitCode = cmd.ProcessState.ExitCode()
 				c.errorf("failed to run Helm: %s", err)
 			}
+			return
 		}
 
 		if step.Action == "transform-values" {
@@ -225,6 +229,4 @@ func (c *HelmWrapper) RunHelm() {
 			}
 		}
 	}
-
-	defer c.pipeWriterWaitGroup.Wait()
 }
