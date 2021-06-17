@@ -171,7 +171,7 @@ func (c *HelmWrapper) RunHelm() {
 				continue
 			}
 
-			cmd := exec.Command("/bin/sh", "-c", step.Command)
+			cmd := exec.Command("/bin/bash", "-euo", "pipefail", "-c", step.Command)
 
 			//helmargs := "\"" + strings.Join(os.Args[1:], "\" \"") + "\""
 			helmargs := strings.Join(os.Args[1:], " ")
