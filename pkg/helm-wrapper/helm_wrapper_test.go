@@ -1,24 +1,24 @@
 package helmwrapper
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"os/exec"
-	"io"
-	"bytes"
 	"sync"
-    "testing"
+	"testing"
 
-    "github.com/kylelemons/godebug/diff"
+	"github.com/kylelemons/godebug/diff"
 )
 
-var g_hw *HelmWrapper
+var hw *HelmWrapper
 
 func init() {
 	os.Setenv("HELMWRAP_CONFIG", `[
 		{"action":"transform-values","filter":"$.sops.lastmodified","command":"sops -d {}"},
 		{"action":"shell-exec","command":"$HELM"}
 	]`)
-    g_hw, _ = NewHelmWrapper()
+	hw, _ = NewHelmWrapper()
 }
 
 func TestNewHelmWrapper(t *testing.T) {
@@ -26,10 +26,10 @@ func TestNewHelmWrapper(t *testing.T) {
 }
 
 func TestErrorf(t *testing.T) {
-	g_hw.Errors = []error{}
-	err := g_hw.errorf("test %s %d %t", "a", 1, true)
-	if g_hw.Errors[0] != err {
-		t.Errorf("errorf(test %%s %%d %%t, a, 1, true) = %s; want %s",  g_hw.Errors[0], err)
+	hw.Errors = []error{}
+	err := hw.errorf("test %s %d %t", "a", 1, true)
+	if hw.Errors[0] != err {
+		t.Errorf("errorf(test %%s %%d %%t, a, 1, true) = %s; want %s", hw.Errors[0], err)
 	}
 }
 
@@ -38,37 +38,37 @@ func TestPipeWriter(t *testing.T) {
 }
 
 func TestValuesArg(t *testing.T) {
-	res, _, err := g_hw.valuesArg([]string{"-f", "cat.yaml"})
+	res, _, err := hw.valuesArg([]string{"-f", "cat.yaml"})
 	if res != "cat.yaml" || err != nil {
-		t.Errorf("valuesArg([]string{\"-f\", \"cat.yaml\"}) = %s, %s; want cat.yaml, <nil>",  res, "cat.yaml")
+		t.Errorf("valuesArg([]string{\"-f\", \"cat.yaml\"}) = %s, %s; want cat.yaml, <nil>", res, "cat.yaml")
 	}
 
-	res, _, err = g_hw.valuesArg([]string{"--values", "cat.yaml"})
+	res, _, err = hw.valuesArg([]string{"--values", "cat.yaml"})
 	if res != "cat.yaml" || err != nil {
-		t.Errorf("valuesArg([]string{\"--valuse\", \"cat.yaml\"}) = %s, %s; want cat.yaml, <nil>",  res, "cat.yaml")
+		t.Errorf("valuesArg([]string{\"--valuse\", \"cat.yaml\"}) = %s, %s; want cat.yaml, <nil>", res, "cat.yaml")
 	}
 
-	res, _, err = g_hw.valuesArg([]string{"--values=cat.yaml"})
+	res, _, err = hw.valuesArg([]string{"--values=cat.yaml"})
 	if res != "cat.yaml" || err != nil {
-		t.Errorf("valuesArg([]string{\"--values=cat.yaml\"}) = %s, %s; want cat.yaml, <nil>",  res, "cat.yaml")
+		t.Errorf("valuesArg([]string{\"--values=cat.yaml\"}) = %s, %s; want cat.yaml, <nil>", res, "cat.yaml")
 	}
 }
 
 func TestReplaceValueFileArg(t *testing.T) {
 	args := []string{"-f", "cat.yaml"}
-	g_hw.replaceValueFileArg(args, "dog.yaml")
+	hw.replaceValueFileArg(args, "dog.yaml")
 	if args[1] != "dog.yaml" {
 		t.Errorf("args[1] = %s; want dog.yaml", args[1])
 	}
 
 	args = []string{"--values", "cat.yaml"}
-	g_hw.replaceValueFileArg(args, "dog.yaml")
+	hw.replaceValueFileArg(args, "dog.yaml")
 	if args[1] != "dog.yaml" {
 		t.Errorf("args[1] = %s; want dog.yaml", args[1])
 	}
 
 	args = []string{"--values=cat.yaml"}
-	g_hw.replaceValueFileArg(args, "dog.yaml")
+	hw.replaceValueFileArg(args, "dog.yaml")
 	if args[0] != "--values=dog.yaml" {
 		t.Errorf("args[1] = %s; want --values=dog.yaml", args[1])
 	}
@@ -76,19 +76,19 @@ func TestReplaceValueFileArg(t *testing.T) {
 
 func TestMkTmpDir(t *testing.T) {
 	// ensure no errors
-	cleanFn, err := g_hw.mkTmpDir()
+	cleanFn, err := hw.mkTmpDir()
 	if err != nil {
 		t.Errorf("mkTmpDir error: %s", err)
 	}
 
 	// dir exists
-	if _, err = os.Stat(g_hw.temporaryDirectory); err != nil {
+	if _, err = os.Stat(hw.temporaryDirectory); err != nil {
 		t.Errorf("mkTmpDir stat error: %s", err)
 	}
 
 	// ensure dir is deleted
 	cleanFn()
-	if _, err = os.Stat(g_hw.temporaryDirectory); err == nil {
+	if _, err = os.Stat(hw.temporaryDirectory); err == nil {
 		t.Errorf("mkTmpDir cleanup func did not work")
 	} else if !os.IsNotExist(err) {
 		t.Errorf("mkTmpDir cleanup something went wrong: %s", err)
@@ -97,7 +97,7 @@ func TestMkTmpDir(t *testing.T) {
 
 func TestMkPipe(t *testing.T) {
 	// ensure no errors
-	err := g_hw.mkPipe("cat.yaml")
+	err := hw.mkPipe("cat.yaml")
 	if err != nil {
 		t.Errorf("mkPipe error: %s", err)
 	}
@@ -134,10 +134,9 @@ func TestRunHelm(t *testing.T) {
 		"--values=../../test/charts/test/values-enc.yaml",
 		"--values=../../test/charts/test/extra.yaml",
 	}
-	g_hw.RunHelm()
+	hw.RunHelm()
 	writer.Close()
 	wg.Wait()
-
 
 	reader, writer, err = os.Pipe()
 	if err != nil {
@@ -154,7 +153,7 @@ func TestRunHelm(t *testing.T) {
 	}()
 
 	args := []string{
-		g_hw.helmBinPath,
+		hw.helmBinPath,
 		"template",
 		"../../test/charts/test",
 		"--values=../../test/charts/test/values-dec.yaml",
