@@ -8,28 +8,28 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strings"
 	"sync"
 	"syscall"
-	"strings"
 
 	//"go.mozilla.org/sops/v3/decrypt"
 
-	"github.com/teejaded/helm-wrap/pkg/utils"
 	"github.com/teejaded/helm-wrap/pkg/config"
+	"github.com/teejaded/helm-wrap/pkg/utils"
 )
 
 type HelmWrapper struct {
 	config.Config
 
-	Errors []error
+	Errors   []error
 	errMutex sync.Mutex
 
 	ExitCode int
 
-	helmBinPath string
+	helmBinPath         string
 	pipeWriterWaitGroup sync.WaitGroup
-	valuesArgRegexp *regexp.Regexp
-	temporaryDirectory string
+	valuesArgRegexp     *regexp.Regexp
+	temporaryDirectory  string
 }
 
 func NewHelmWrapper() (*HelmWrapper, error) {
@@ -167,7 +167,7 @@ func (c *HelmWrapper) RunHelm() {
 	for _, step := range c.Steps {
 
 		if step.Action == "shell-exec" {
-			if step.Filter != "" && step.Filter != os.Args[1] {
+			if step.Filter != "" && len(os.Args) > 1 && step.Filter != os.Args[1] {
 				continue
 			}
 
@@ -195,6 +195,7 @@ func (c *HelmWrapper) RunHelm() {
 
 				filename, transformedFilename, err := c.valuesArg(args)
 				if err != nil {
+					c.ExitCode = 10
 					return
 				}
 				if filename == "" {
@@ -205,6 +206,7 @@ func (c *HelmWrapper) RunHelm() {
 					match, err := utils.DetectJsonPath(filename, step.Filter)
 					if err != nil {
 						c.errorf("error testing jsonpath {%s}: %s", step.Filter, err)
+						c.ExitCode = 11
 						return
 					}
 					if !match {
@@ -216,11 +218,13 @@ func (c *HelmWrapper) RunHelm() {
 				transformedValues, err := utils.Exec(step.Command, filename)
 				if err != nil {
 					c.errorf("failed to transform file '%s': %s", filename, err)
+					c.ExitCode = 12
 					return
 				}
 
 				cleanFn, err := c.mkPipe(transformedFilename)
 				if err != nil {
+					c.ExitCode = 13
 					return
 				}
 				defer cleanFn()
