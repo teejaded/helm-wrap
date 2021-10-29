@@ -167,7 +167,7 @@ func (c *HelmWrapper) RunHelm() {
 	for _, step := range c.Steps {
 
 		if step.Action == "shell-exec" {
-			if step.Filter != "" && step.Filter != os.Args[1] {
+			if step.Filter != "" && len(os.Args) > 1 && step.Filter != os.Args[1] {
 				continue
 			}
 
