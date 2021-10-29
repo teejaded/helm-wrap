@@ -70,6 +70,14 @@ func (c *HelmWrapper) pipeWriter(outPipeName string, data []byte) {
 	c.pipeWriterWaitGroup.Add(1)
 	defer c.pipeWriterWaitGroup.Done()
 
+	defer func() {
+		err := os.Remove(outPipeName)
+		if err != nil {
+			c.errorf("failed to remove cleartext secret pipe '%s': %s", outPipeName, err)
+		}
+	}()
+
+	// OpenFile blocks until a reader opens the file
 	cleartextSecretFile, err := os.OpenFile(outPipeName, os.O_WRONLY, 0)
 	if err != nil {
 		c.errorf("failed to open cleartext secret pipe '%s' in pipe writer: %s", outPipeName, err)
@@ -135,17 +143,12 @@ func (c *HelmWrapper) mkTmpDir() (func(), error) {
 	}, nil
 }
 
-func (c *HelmWrapper) mkPipe(filename string) (func(), error) {
+func (c *HelmWrapper) mkPipe(filename string) error {
 	err := syscall.Mkfifo(filename, 0600)
 	if err != nil {
-		return nil, c.errorf("failed to create cleartext secret pipe '%s': %s", filename, err)
+		return c.errorf("failed to create cleartext secret pipe '%s': %s", filename, err)
 	}
-	return func() {
-		err := os.Remove(filename)
-		if err != nil {
-			c.errorf("failed to remove cleartext secret pipe '%s': %s", filename, err)
-		}
-	}, nil
+	return nil
 }
 
 func (c *HelmWrapper) RunHelm() {
@@ -222,12 +225,11 @@ func (c *HelmWrapper) RunHelm() {
 					return
 				}
 
-				cleanFn, err := c.mkPipe(transformedFilename)
+				err = c.mkPipe(transformedFilename)
 				if err != nil {
 					c.ExitCode = 13
 					return
 				}
-				defer cleanFn()
 
 				go c.pipeWriter(transformedFilename, transformedValues)
 			}
