@@ -97,7 +97,7 @@ func TestMkTmpDir(t *testing.T) {
 
 func TestMkPipe(t *testing.T) {
 	// ensure no errors
-	cleanFn, err := g_hw.mkPipe("cat.yaml")
+	err := g_hw.mkPipe("cat.yaml")
 	if err != nil {
 		t.Errorf("mkPipe error: %s", err)
 	}
@@ -107,13 +107,7 @@ func TestMkPipe(t *testing.T) {
 		t.Errorf("mkPipe stat error: %s", err)
 	}
 
-	// ensure file is deleted
-	cleanFn()
-	if _, err = os.Stat("cat.yaml"); err == nil {
-		t.Errorf("mkPipe cleanup func did not work")
-	} else if !os.IsNotExist(err) {
-		t.Errorf("mkPipe cleanup something went wrong: %s", err)
-	}
+	os.Remove("cat.yaml")
 }
 
 func TestRunHelm(t *testing.T) {
