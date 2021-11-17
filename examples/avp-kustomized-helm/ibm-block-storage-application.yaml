@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ibm-block-storage
+spec:
+  project: ibm-block-storage
+  source:
+    repoURL: 'https://icr.io/helm/iks-charts'
+    targetRevision: 2.1.2
+    helm:
+      releaseName: ibm-block-storage
+      values: |
+        Kustomize:
+          kustomization.yaml: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+            - all.yaml
+            patches:
+            - patch: |-
+                - op: add
+                  path: /volumeBindingMode
+                  value: WaitForFirstConsumer
+              target:
+                kind: StorageClass
+    chart: ibmcloud-block-storage-plugin
+  destination:
+    server: 'https://my-k8s-server'
+    namespace: kube-system

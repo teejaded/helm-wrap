@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+spec:
+  destination:
+    namespace: monitoring
+    server: https://my-k8s-server
+  project: kube-prometheus-stack
+  source:
+    chart: kube-prometheus-stack
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 19.2.3
+    helm:
+      releaseName: prometheus-operator
+      values: |
+        grafana:
+          adminPassword: <path:secrets/monitoring/grafana#adminPassword>
+          grafana.ini:
+            auth.generic_oauth:
+              api_url: https://oidc-server/userinfo
+              auth_url: https://oidc-server/authorize
+              client_id: "$__file{/etc/secrets/auth_generic_oauth/client_id}"
+              client_secret: "$__file{/etc/secrets/auth_generic_oauth/client_secret}"
+              enabled: "true"
+              scopes: openid
+              token_url: https://oidc-server/token
+          extraSecretMounts:
+          - name: auth-generic-oauth-secret-mount
+            secretName: auth-generic-oauth-secret
+            defaultMode: 0440
+            mountPath: /etc/secrets/auth_generic_oauth
+            readOnly: true
+        Kustomize:
+          kustomization.yaml: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+            - all.yaml
+            secretGenerator:
+            - name: auth-generic-oauth-secret
+              literals:
+              - client_id=<path:secrets/monitoring/grafana#clientID>
+              - client_secret=<path:secrets/monitoring/grafana#clientSecret>
