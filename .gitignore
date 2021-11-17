@@ -1,3 +1,5 @@
 dist/
 helm-sops
 vendor
+./helm-wrap
+cover.out
