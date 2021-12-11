@@ -131,6 +131,8 @@ func TestRunHelm(t *testing.T) {
 		"./helm-wrap",
 		"template",
 		"../../test/charts/test",
+		"--namespace",
+		"*",
 		"--values=../../test/charts/test/values-enc.yaml",
 		"--values=../../test/charts/test/extra.yaml",
 	}
@@ -156,6 +158,8 @@ func TestRunHelm(t *testing.T) {
 		hw.helmBinPath,
 		"template",
 		"../../test/charts/test",
+		"--namespace",
+		"*",
 		"--values=../../test/charts/test/values-dec.yaml",
 		"--values=../../test/charts/test/extra.yaml",
 	}
