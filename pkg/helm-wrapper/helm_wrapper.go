@@ -205,6 +205,12 @@ func (c *HelmWrapper) RunHelm() {
 					return
 				}
 				if filename == "" {
+					// This is not a -f or --values parameter
+					continue
+				}
+				if strings.HasPrefix(filename, c.temporaryDirectory) {
+					// If we get here that means this file was pre-processed by something else.
+					// We must skip it, otherwise we will consume the fifo-pipe
 					continue
 				}
 
