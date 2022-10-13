@@ -18,8 +18,13 @@ import (
 	"github.com/teejaded/helm-wrap/pkg/utils"
 )
 
+// Configurer interface returns an array of steps
+type Configurer interface {
+	Steps() []config.Step
+}
+
 type HelmWrapper struct {
-	config.Config
+	cfg Configurer
 
 	Errors   []error
 	errMutex sync.Mutex
@@ -32,12 +37,8 @@ type HelmWrapper struct {
 	temporaryDirectory  string
 }
 
-func NewHelmWrapper() (*HelmWrapper, error) {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %s", err)
-	}
-	c := HelmWrapper{Config: cfg}
+func NewHelmWrapper(cfg Configurer) (*HelmWrapper, error) {
+	c := HelmWrapper{cfg: cfg}
 
 	c.Errors = []error{}
 	c.pipeWriterWaitGroup = sync.WaitGroup{}
@@ -50,6 +51,7 @@ func NewHelmWrapper() (*HelmWrapper, error) {
 		helmBinName = fmt.Sprintf("_%s", ourBinName)
 	}
 
+	var err error
 	c.helmBinPath, err = exec.LookPath(helmBinName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Helm binary '%s': %s", helmBinName, err)
@@ -167,7 +169,7 @@ func (c *HelmWrapper) RunHelm() {
 	// If we find a values argument, check if file has a sops section indicating it is encrypted.
 	// Setup a named pipe and write the decrypted data into that for helm.
 
-	for _, step := range c.Steps {
+	for _, step := range c.cfg.Steps() {
 
 		if step.Action == "shell-exec" {
 			if step.Filter != "" && len(os.Args) > 1 && step.Filter != os.Args[1] {
