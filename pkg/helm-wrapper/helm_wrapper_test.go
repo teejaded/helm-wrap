@@ -9,16 +9,23 @@ import (
 	"testing"
 
 	"github.com/kylelemons/godebug/diff"
+
+	"github.com/teejaded/helm-wrap/pkg/config"
 )
 
 var hw *HelmWrapper
 
+type testCfg struct{}
+
+func (c testCfg) Steps() []config.Step {
+	return []config.Step{
+		{Action: "transform-values", Filter: "$.sops.lastmodified", Command: "sops -d {}"},
+		{Action: "shell-exec", Command: "$HELM"},
+	}
+}
+
 func init() {
-	os.Setenv("HELMWRAP_CONFIG", `[
-		{"action":"transform-values","filter":"$.sops.lastmodified","command":"sops -d {}"},
-		{"action":"shell-exec","command":"$HELM"}
-	]`)
-	hw, _ = NewHelmWrapper()
+	hw, _ = NewHelmWrapper(testCfg{})
 }
 
 func TestNewHelmWrapper(t *testing.T) {

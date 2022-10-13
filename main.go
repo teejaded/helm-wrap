@@ -23,11 +23,19 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/teejaded/helm-wrap/pkg/config"
 	"github.com/teejaded/helm-wrap/pkg/helm-wrapper"
 )
 
 func main() {
-	w, err := helmwrapper.NewHelmWrapper()
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[helm-wrap] Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	w, err := helmwrapper.NewHelmWrapper(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[helm-wrap] Error: %s\n", err)
 		os.Exit(1)
