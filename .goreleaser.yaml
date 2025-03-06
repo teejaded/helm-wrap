@@ -1,4 +1,4 @@
-project_name: "helm-wrap"
+version: 2
 
 before:
   hooks:
@@ -11,11 +11,19 @@ builds:
     mod_timestamp: "{{ $.CommitTimestamp }}"
     env:
       - "CGO_ENABLED=0"
-
-release:
-  prerelease: "false"
+    goos:
+      - linux
 
 changelog:
+  sort: asc
   filters:
     exclude:
-      - "^(refactor|style|test|docs|ci)(\\([^)]+\\))?(!)?:"
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

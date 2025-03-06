@@ -8,7 +8,7 @@ test:
 	go test -v -coverprofile cover.out ./...
 
 build:
-	goreleaser --snapshot --skip-publish --rm-dist
+	goreleaser build --clean --snapshot
 
 deps:
 	go install github.com/goreleaser/goreleaser@latest
