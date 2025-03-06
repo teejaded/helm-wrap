@@ -100,6 +100,9 @@ The values file path is subsituted for `{}`.
 
 There is an optional "filter" parameter which will check if a json path exists before running your command.
 
+### process-values action
+
+Similar to transform-values, this action calls your command for each helm values file found in the arguments, but it does not capture stdout.
 
 ### shell-exec
 

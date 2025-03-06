@@ -23,6 +23,13 @@ type Configurer interface {
 	Steps() []config.Step
 }
 
+type valuesArg struct {
+	index               int
+	filename            string
+	transformedFilename string
+	transformed         bool
+}
+
 type HelmWrapper struct {
 	cfg Configurer
 
@@ -153,6 +160,16 @@ func (c *HelmWrapper) mkPipe(filename string) error {
 	return nil
 }
 
+func (c *HelmWrapper) filterMatch(filename string, filter string) (bool, error) {
+	match, err := utils.DetectJsonPath(filename, filter)
+	if err != nil {
+		c.ExitCode = 11
+		c.errorf("error testing jsonpath {%s}: %s", filter, err)
+		return false, err
+	}
+	return match, nil
+}
+
 func (c *HelmWrapper) RunHelm() {
 	var err error
 	// Setup temporary directory and defer cleanup
@@ -164,6 +181,24 @@ func (c *HelmWrapper) RunHelm() {
 
 	// Make sure we wait for the pipes to close before we return
 	defer c.pipeWriterWaitGroup.Wait()
+
+	// Make an array of values file args
+	valuesArgs := make([]valuesArg, 0)
+	for i := range os.Args {
+		args := os.Args[i:]
+
+		filename, transformedFilename, err := c.valuesArg(args)
+		if err != nil {
+			c.ExitCode = 10
+			return
+		}
+		if filename == "" {
+			// This is not a -f or --values parameter
+			continue
+		}
+
+		valuesArgs = append(valuesArgs, valuesArg{i, filename, transformedFilename, false})
+	}
 
 	// Loop through arguments looking for --values or -f.
 	// If we find a values argument, check if file has a sops section indicating it is encrypted.
@@ -197,30 +232,34 @@ func (c *HelmWrapper) RunHelm() {
 			return
 		}
 
-		if step.Action == "transform-values" {
-			for i := range os.Args {
-				args := os.Args[i:]
+		if step.Action == "process-values" {
+			for _, v := range valuesArgs {
+				if step.Filter != "" {
+					match, err := c.filterMatch(v.filename, step.Filter)
+					if err != nil {
+						return
+					}
+					if !match {
+						continue
+					}
+				}
+				utils.Exec(step.Command, v.filename)
+			}
+		}
 
-				filename, transformedFilename, err := c.valuesArg(args)
-				if err != nil {
-					c.ExitCode = 10
-					return
-				}
-				if filename == "" {
-					// This is not a -f or --values parameter
-					continue
-				}
-				if strings.HasPrefix(filename, c.temporaryDirectory) {
+		if step.Action == "transform-values" {
+			for _, v := range valuesArgs {
+				args := os.Args[v.index:]
+
+				if v.transformed {
 					// If we get here that means this file was pre-processed by something else.
 					// We must skip it, otherwise we will consume the fifo-pipe
 					continue
 				}
 
 				if step.Filter != "" {
-					match, err := utils.DetectJsonPath(filename, step.Filter)
+					match, err := c.filterMatch(v.filename, step.Filter)
 					if err != nil {
-						c.errorf("error testing jsonpath {%s}: %s", step.Filter, err)
-						c.ExitCode = 11
 						return
 					}
 					if !match {
@@ -228,21 +267,22 @@ func (c *HelmWrapper) RunHelm() {
 					}
 				}
 
-				c.replaceValueFileArg(args, transformedFilename)
-				transformedValues, err := utils.Exec(step.Command, filename)
+				v.transformed = true
+				c.replaceValueFileArg(args, v.transformedFilename)
+				transformedValues, err := utils.Exec(step.Command, v.filename)
 				if err != nil {
-					c.errorf("failed to transform file '%s': %s", filename, err)
+					c.errorf("failed to transform file '%s': %s", v.filename, err)
 					c.ExitCode = 12
 					return
 				}
 
-				err = c.mkPipe(transformedFilename)
+				err = c.mkPipe(v.transformedFilename)
 				if err != nil {
 					c.ExitCode = 13
 					return
 				}
 
-				go c.pipeWriter(transformedFilename, transformedValues)
+				go c.pipeWriter(v.transformedFilename, transformedValues)
 			}
 		}
 	}
