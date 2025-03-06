@@ -1,14 +1,14 @@
 package utils
 
 import (
-	"io/ioutil"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
 
-	"sigs.k8s.io/yaml"
 	"k8s.io/client-go/util/jsonpath"
+	"sigs.k8s.io/yaml"
 )
 
 func DetectSopsYaml(filename string) (bool, error) {
@@ -24,12 +24,12 @@ func DetectJsonPath(filename string, path string) (bool, error) {
 	var data interface{}
 	err = yaml.Unmarshal(bytes, &data)
 	if err != nil {
-	    return false, fmt.Errorf("yaml.Unmarshal: %w", err)
+		return false, fmt.Errorf("yaml.Unmarshal: %w", err)
 	}
 
 	j := jsonpath.New("DetectSopsYaml").AllowMissingKeys(true)
 
-	err = j.Parse(fmt.Sprintf("{%s}",path))
+	err = j.Parse(fmt.Sprintf("{%s}", path))
 	if err != nil {
 		return false, fmt.Errorf("jsonpath.Parse: %w", err)
 	}
@@ -42,7 +42,7 @@ func DetectJsonPath(filename string, path string) (bool, error) {
 	return len(res[0]) > 0, nil
 }
 
-func Exec(binargs string, filename string) ([]byte, error) {
+func Exec(binargs string, filename string, env []string) ([]byte, error) {
 	args := strings.Split(binargs, " ")
 	for i, arg := range args {
 		if arg == "{}" {
@@ -51,11 +51,11 @@ func Exec(binargs string, filename string) ([]byte, error) {
 	}
 	path, err := exec.LookPath(args[0])
 	if err != nil {
-	    return nil, err
+		return nil, err
 	}
 	args[0] = path
 	cmd := exec.Command(path, args[1:]...)
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = os.Stderr
 	return cmd.Output()
 }

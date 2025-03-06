@@ -3,7 +3,6 @@ package helmwrapper
 import (
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -140,7 +139,7 @@ func (c *HelmWrapper) replaceValueFileArg(args []string, cleartextSecretFilename
 
 func (c *HelmWrapper) mkTmpDir() (func(), error) {
 	var err error
-	c.temporaryDirectory, err = ioutil.TempDir("", fmt.Sprintf("%s.", path.Base(os.Args[0])))
+	c.temporaryDirectory, err = os.MkdirTemp("", fmt.Sprintf("%s.", path.Base(os.Args[0])))
 	if err != nil {
 		return nil, c.errorf("failed to create temporary directory: %s", err)
 	}
@@ -218,8 +217,12 @@ func (c *HelmWrapper) RunHelm() {
 			for _, arg := range os.Args[1:] {
 				helmargs += strings.ReplaceAll(arg, "*", "\\*") + " "
 			}
-			helmenv := fmt.Sprintf("HELM=%s %s", c.helmBinPath, helmargs)
-			cmd.Env = append(os.Environ(), helmenv)
+
+			cmd.Env = append(
+				os.Environ(),
+				fmt.Sprintf("HELM=%s %s", c.helmBinPath, helmargs),
+				fmt.Sprintf("TMPDIR=%s", c.temporaryDirectory),
+			)
 
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
@@ -243,7 +246,7 @@ func (c *HelmWrapper) RunHelm() {
 						continue
 					}
 				}
-				utils.Exec(step.Command, v.filename)
+				utils.Exec(step.Command, v.filename, []string{fmt.Sprintf("TMPDIR=%s", c.temporaryDirectory)})
 			}
 		}
 
@@ -269,7 +272,7 @@ func (c *HelmWrapper) RunHelm() {
 
 				v.transformed = true
 				c.replaceValueFileArg(args, v.transformedFilename)
-				transformedValues, err := utils.Exec(step.Command, v.filename)
+				transformedValues, err := utils.Exec(step.Command, v.filename, []string{fmt.Sprintf("TMPDIR=%s", c.temporaryDirectory)})
 				if err != nil {
 					c.errorf("failed to transform file '%s': %s", v.filename, err)
 					c.ExitCode = 12
